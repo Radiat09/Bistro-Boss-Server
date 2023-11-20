@@ -46,6 +46,7 @@ async function run() {
     const menuCollection = client.db("bistroDB").collection("menu");
     const cartCollection = client.db("bistroDB").collection("carts");
     const userCollection = client.db("bistroDB").collection("users");
+    const paymentCollection = client.db("bistroDB").collection("payments");
 
     // jwt related api
     app.post("/api/v1/jwt", async (req, res) => {
@@ -222,6 +223,7 @@ async function run() {
     // Payment Intent (Stripe)
     app.post("/api/v1/create-payment-intent", async (req, res) => {
       const { price } = req.body;
+      // console.log(price);
       const amount = parseInt(price * 100);
 
       const paymentIntent = await stripe.paymentIntents.create({
@@ -233,6 +235,33 @@ async function run() {
       res.send({
         clientSecret: paymentIntent.client_secret,
       });
+    });
+
+    //payments related api
+    app.get("/api/v1/payments/:email", verifyToken, async (req, res) => {
+      const email = req.params?.email;
+      console.log(email);
+      if (req.params?.email !== req.decoded?.email) {
+        res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.post("/api/v1/payments", async (req, res) => {
+      const payment = req.body;
+      const paymentResult = await paymentCollection.insertOne(payment);
+
+      //carefully delete each cart item from cart
+      // console.log("payment info", payment);
+      const query = {
+        _id: {
+          $in: payment?.cartIds?.map((id) => new ObjectId(id)),
+        },
+      };
+      const deleteResult = await cartCollection.deleteMany(query);
+      res.send({ paymentResult, deleteResult });
     });
 
     // Send a ping to confirm a successful connection
